@@ -1,0 +1,354 @@
+---
+title: "BEE 4750/5750 Homework 2"
+author: "Audrey Noziere (aln57)"
+date: `j import Dates; Dates.Date(Dates.now())`
+weave_options:
+    term: true
+    results: tex
+    cache: off
+---
+
+<!-- This setups the environment and installs packages, but doesn't appear in the generated document -->
+<!-- You shouldn't need to modify this -->
+```julia; echo = false; results = "hidden"
+using Pkg
+Pkg.activate(".")
+Pkg.instantiate()
+using Plots
+using Random 
+using Distributions 
+```
+
+# Problem 1
+## Problem 1.1
+### below are my functions to solve the problem
+```julia 
+function DO_mix(Q1,C1,Q2,C2) #calculates the new concentration after mixing
+  DO_mix = (Q1*C1 + Q2*C2)/(Q1+Q2)
+return DO_mix
+end
+
+
+function CBOD_mix(Q1,CB1,Q2,CB2) #calculates the new concentration after mixing
+  CBOD_mix = (Q1*CB1 + Q2*CB2)/(Q1+Q2)
+return CBOD_mix
+end
+
+
+function NBOD_mix(Q1,NB1,Q2,NB2) #calculates the new concentration after mixing
+  NBOD_mix = (Q1*NB1 + Q2*NB2)/(Q1+Q2)
+return NBOD_mix
+end
+
+
+#Defining Global Variables
+k_a = 0.55
+k_c = 0.35
+k_n = 0.25
+U = 6
+C_s = 10
+
+
+function DO_conc(Q1,C1,CB1,NB1,Q2,C2,CB2,NB2,x) ##calculates the DO concentration at every km
+  DO_mix1 = (Q1*C1 + Q2*C2)/(Q1+Q2)
+  CBOD_mix1 = (Q1*CB1 + Q2*CB2)/(Q1+Q2)
+  NBOD_mix1 = (Q1*NB1 + Q2*NB2)/(Q1+Q2)
+  Q_mix = Q1 + Q2
+  k_a = 0.55
+  k_c = 0.35
+  k_n = 0.25
+  U = 6
+  C_s = 10
+  A_1 = exp(-k_a*x/U)
+  A_2 = (k_c/(k_a-k_c))*((exp(-k_c*x/U))-(exp(-k_a*x/U)))
+  A_3 = (k_n/(k_a-k_n))*((exp(-k_n*x/U))-(exp(-k_a*x/U)))
+  if x == 0 
+    DO = C1 
+  else
+    DO = C_s*(1-A_1) + DO_mix1*A_1 - CBOD_mix1*A_2 - NBOD_mix1*A_3
+  end
+  CBOD = CBOD_mix1*exp(-k_c*x/U)
+  NBOD = NBOD_mix1*exp(-k_n*x/U)
+return DO
+end
+
+# concentrations right before mixing of stream 2 with the river 
+DO_15 = DO_conc(1*10^8,7.5,5,5,1*10^7,5,50,35,15) 
+CBOD_15 = CBOD_mix(1*10^8,5,1*10^7,50)*exp(-k_c*15/6)
+NBOD_15 = NBOD_mix(1*10^8,5,1*10^7,35)*exp(-k_n*15/6)
+Q_mix = 1*10^8 + 1*10^7
+
+#making a array which has the concentration at every km
+Conc = []
+x = [0:50;] 
+while length(Conc) < 50 
+  for i in x 
+    if i <= 14
+       push!(Conc, (i, DO_conc(1*10^8,7.5,5,5,1*10^7,5,50,35,i)))
+    else
+      push!(Conc, (i, DO_conc(Q_mix, DO_15, CBOD_15,NBOD_15, 1.5*10^7, 5,45,35,i-15)))
+  end
+end
+return Conc
+end
+
+#plotting Conc
+distance = [o[1] for o in Conc]
+DO = [o[2] for o in Conc]
+plot(distance, DO, title = "Concentration of Dissolve Oxygen with distance", xlabel = "Distance Km", ylabel = "DO in mg/l", label = "DO Concentration") 
+
+```
+
+## Problem 1.2
+```julia 
+plot!([6],seriestype="hline",label="6mg/l")
+
+for i in Conc
+  if i[1] > 15
+    if i[2] >= 5.99 
+    return i[1]-15 #km from source 2 
+    end
+end
+end
+
+```
+It is 27 km from source 2 when the DO reaches 6mg/l again 
+## Problem 1.3
+Fist I am searching for the lowest DO Concentration because I want to make sure that point is above 4mg/l. I use the min-function to do so
+```julia
+findmin(o[2] for o in Conc)
+#Hence I know that the min occurs at 23 km in distance which is a little bit after outflow 2
+#I can use this value to calculate nessesary treatment to have it above 4mg/l
+
+c =[0.01:0.01:0.99;] #possible treatment percentages
+for l in c
+if DO_conc(Q_mix, DO_15, CBOD_15 ,NBOD_15, 1.5*10^7, 5, 45*(1-l) ,35*(1-l),23-15) >= 4
+    return DO_conc(Q_mix, DO_15, CBOD_15 ,NBOD_15, 1.5*10^7, 5, 45*(1-l) ,35*(1-l),23-15), l 
+  end
+end   
+```  
+Hence we must treat it by about 11 percent less than its current outflow of 45mg/l in order to meet standards
+
+Below is a plot which shows how the treatment by 11 percent abides by standards
+```julia; echo=false
+Treat_Conc = []
+x = [0:50;] 
+while length(Treat_Conc) < 50 
+  for i in x 
+    if i <= 15
+       push!(Treat_Conc, (i, DO_conc(1*10^8,7.5,5,5,1*10^7,5,50,35,i)))
+    else
+      push!(Treat_Conc, (i, DO_conc(Q_mix, DO_15, CBOD_15,NBOD_15, 1.5*10^7, 5,45*(1-0.11),35*(1-0.11),i-15)))
+  end
+end
+return Treat_Conc
+end
+
+distance2 = [o[1] for o in Treat_Conc]
+DO2 = [o[2] for o in Treat_Conc]
+```
+```julia
+plot(distance2, DO2, title = "Conc of DO with distance: Outfall 2 treated", xlabel = "Distance Km", ylabel = "DO in mg/l", label = "DO Concentration") 
+
+```
+## Problem 1.4
+```julia
+c =[0.01:0.01:0.99;]
+for l in c
+if DO_conc(Q_mix, DO_15, CBOD_mix(1*10^8,5,1*10^7,50*(1-l))*exp(-k_c*15/6), NBOD_mix(1*10^8,5,1*10^7,35*(1-l))*exp(-k_n*15/6), 1.5*10^7, 5, 45*(1-l) ,35*(1-l),23-15) >= 4
+    return DO_conc(Q_mix, DO_15, CBOD_mix(1*10^8,5,1*10^7,50*(1-l))*exp(-k_c*15/6), NBOD_mix(1*10^8,5,1*10^7,35*(1-l))*exp(-k_n*15/6), 1.5*10^7, 5, 45*(1-l) ,35*(1-l),23-15), l 
+  end
+end 
+```
+Hence we must treat both streams by about 9 percent less than its current outflows of 45mg/l in order to meet standards'
+```julia
+#updating the values at km 15 before mixing with new stream
+NBODTreat_15 = NBOD_mix(1*10^8,5,1*10^7,35*(1-0.09))*exp(-k_n*15/6)
+CBODTreat_15 = CBOD_mix(1*10^8,5,1*10^7,50*(1-0.09))*exp(-k_c*15/6)
+
+Treat_Conc2 = []
+x = [0:50;] 
+while length(Treat_Conc2) < 50 
+  for i in x 
+    if i <= 15
+       push!(Treat_Conc2, (i, DO_conc(1*10^8,7.5,5,5,1*10^7,5,50*(1-0.09),35*(1-0.09),i)))
+    else
+      push!(Treat_Conc2, (i, DO_conc(Q_mix, DO_15, CBODTreat_15,NBODTreat_15, 1.5*10^7, 5,45*(1-0.09),35*(1-0.09),i-15)))
+  end
+end
+end
+Treat_Conc2
+
+distance3 = [o[1] for o in Treat_Conc2]
+DO3 = [o[2] for o in Treat_Conc2]
+```
+Below is the plot once again just for a visual 
+```julia
+plot(distance3, DO3, title = "Conc of DO with distance with equal treatment", xlabel = "Distance Km", ylabel = "DO in mg/l", label = "DO Concentration") 
+plot!([4],seriestype="hline")
+
+```
+## Problem 1.5
+I dont think it would be fair to only force Outfall 2 to treat its waste stream level because if it werent after outfall 1 it would likely meet the regulatory standards. 
+Hence I would require that both treat their waste level by the same amount relative to the amount their are outputting so that it would be more fair and that the burden of the cost is not soley on Outfall 2. 
+This way we are capping the amount released by the same amount (proportionally) for both outfalls.
+Some more information that I would like to know is the cost of the treatment for each treatment plant. From what we've seen above, only treating one outfall require 11% treatment but treating both require 9% treatment for each. 
+Knowing this, it may may be more financially favorable for Outfall 1 to subsidise part of the 11% treatment that Outfall 2 may need to do pay for rather than both spending to treat their own outfalls.
+Another piece of information which would be important to know, is the cost for treatment by the type of waste (ie. CBOD, NBOD) because they do not discharge the same amount for each
+
+## Problem 1.6
+```julia
+#Generation of Random Uniform Samples
+using Random
+random_levels = [] 
+while length(random_levels) < 100
+    CBOD = rand(4.0:0.1:7.0) 
+    NBOD = rand(3.0:0.1:8.0) 
+    if CBOD + NBOD <= 100
+        push!(random_levels, (CBOD, NBOD)) 
+    end
+end
+randCBOD = [o[1] for o in random_levels]
+randNBOD = [o[2] for o in random_levels]
+
+#calculating new values for km 15 
+rand_CBODTreat_15 = []
+for i in randCBOD
+  push!(rand_CBODTreat_15, CBOD_mix(1*10^8,i,1*10^7,50*(1-0.09))*exp(-k_c*15/6))
+end
+
+rand_NBODTreat_15 = []
+for i in randNBOD
+  push!(rand_NBODTreat_15, NBOD_mix(1*10^8,i,1*10^7,35*(1-0.09))*exp(-k_n*15/6))
+end
+
+randDO_15=[]
+t = [1:100;]
+for i in t
+  push!(randDO_15, DO_conc(1*10^8,7.5,randCBOD[i],randNBOD[i],1*10^7,5,50*(1-0.09),35*(1-0.09),15)) 
+end
+```
+Implementing these new values by looping through 0:50 km and 100 samples. Using exceedences1 as my counter, summing up the total times that it goes over and then dividing it by the total number of samples
+```julia
+j = [0:50;] 
+t = [1:100;]
+let exceedences1 = 0
+for i in t
+  cbod = randCBOD[i]
+  nbod = randNBOD[i] 
+  Do2 = randDO_15[i]
+  cbod2 = rand_CBODTreat_15[i]
+  nbod2 = rand_NBODTreat_15[i] 
+  Rand_DO_Conc = []
+  for l in j
+    if l <= 14
+      push!(Rand_DO_Conc, DO_conc(1*10^8,7.5,cbod,nbod,1*10^7,5,50*(1-0.09),35*(1-0.09),l))
+    else 
+      push!(Rand_DO_Conc, DO_conc(Q_mix, Do2, cbod2, nbod2, 1.5*10^7, 5,45*(1-0.09),35*(1-0.09),l-15))
+    end
+  end
+  if minimum(Rand_DO_Conc) < 4 
+    exceedences1 += 1
+  end
+end
+exceedences1 
+end
+#percent%
+```
+The value displayed above demonstrates the percent of times that the policy failed under the random values. It fails most of the time which is worrying!
+## Problem 1.7
+Below shows the model for correlated samples
+```julia; echo=false
+# This block will not show up in compiled output.
+
+using Distributions
+using PDMats
+
+# This function samples n correlated variates distributed over 
+# Uniform([a[1], a[2]]) and Uniform([b[1], b[2]]) with correlation coefficient
+# corr_coef.
+function sample_correlated_uniform(n, a, b, corr_coef=0.7)
+  mvnorm = MvNormal([0, 0], PDMat([1 corr_coef; corr_coef 1])) # set up a multivariate normal with each marginal variance of 1 and the right correlation
+  norm_samples = rand(mvnorm, n)' # sample from the multivariate normal, the marginal distributions are a standard normal
+  unif_samples = cdf.(Normal(0, 1), norm_samples) # convert samples to a uniform distribution using the pdf of a standard Normal
+  samples = (unif_samples .* [a[2] - a[1] b[2] - b[1]]) .+ [a[1] b[1]]
+  return samples
+end
+```
+```julia
+uni = sample_correlated_uniform(100,(4,7),(3,8)) 
+CBOD_uni = uni[:,1]
+NBOD_uni = uni[:,2]
+
+
+uni_CBODTreat_15 = []
+for i in CBOD_uni
+  push!(uni_CBODTreat_15, CBOD_mix(1*10^8,i,1*10^7,50*(1-0.09))*exp(-k_c*15/6))
+end
+
+uni_NBODTreat_15 = []
+for i in NBOD_uni
+  push!(uni_NBODTreat_15, NBOD_mix(1*10^8,i,1*10^7,35*(1-0.09))*exp(-k_n*15/6))
+end
+
+uniDO_15=[]
+t = [1:100;]
+for i in t
+  push!(uniDO_15, DO_conc(1*10^8,7.5,CBOD_uni[i],NBOD_uni[i],1*10^7,5,50*(1-0.09),35*(1-0.09),15)) 
+end
+```
+Implementing these new values by looping through 0:50 km and 100 samples. Using exceedences2 as my counter, summing up the total times that it goes over and then dividing it by the total number of samples
+```julia
+j = [0:50;] 
+t = [1:100;]
+let exceedences = 0
+for i in t
+  cbod = CBOD_uni[i]
+  nbod = NBOD_uni[i] 
+  Do2 = uniDO_15[i]
+  cbod2 = uni_CBODTreat_15[i]
+  nbod2 = uni_NBODTreat_15[i] 
+  uni_DO_Conc = []
+  for l in j
+    if l <= 14
+      push!(uni_DO_Conc, DO_conc(1*10^8,7.5,cbod,nbod,1*10^7,5,50*(1-0.09),35*(1-0.09),l))
+    else 
+      push!(uni_DO_Conc, DO_conc(Q_mix, Do2, cbod2, nbod2, 1.5*10^7, 5,45*(1-0.09),35*(1-0.09),l-15))
+    end
+  end
+  if minimum(uni_DO_Conc) < 4 
+    exceedences += 1
+  end
+end
+exceedences # percent
+end
+#% percent
+```
+The value displayed above demonstrates the percent of times that the policy failed under the correlated values. It fails most of the time which is worrying!
+
+
+## Problem 1.8
+The presence of uncertainity and dependence have a very big role in my decision making process. As we can see from the results of the previous two problems, the moment that the initial conditions vary a little bit (+- 4mg/l) the whole policy falls apart. This demonstrates that the policy in place is not very robust. I would switch my strategy to reflect something that works better on a wide range of solutions. To do so, I would model 10000+ initial conditions, 10000+ Outflow 1 and 2 conditions in order to get a better idea of how they react with each other. Based on these scenarios I would choose the policy which works the best across all these conditions. This will ensure that my policy is more robust. 
+Other info that I would like to know is if there are any other sources/sinks of CBOD and NBOD (runoff, rain, animals etc...) because this will significantly impact my policy as well. These are uncertainties which could play a big role in my policy working or not. 
+
+# References
+I went to OH on Monday and Wednesday! 
+
+The sources that helped me: 
+
+https://stackoverflow.com/questions/51909814/changing-variable-in-loop-julia
+https://www.geeksforgeeks.org/python-adding-k-to-each-element-in-a-list-of-integers/
+https://www.geeksforgeeks.org/while-loop-in-julia/
+https://www.codecademy.com/forum_questions/53c716af8c1ccc073f000643#:~:text=Meaning%20an%20if%20statement%20gives,as%20the%20condition%20is%20true.
+https://docs.julialang.org/en/v1/manual/control-flow/
+https://docs.julialang.org/en/v1/manual/control-flow/
+https://www.mathworks.com/help/matlab/math/array-indexing.html
+https://cheatsheets.quantecon.org/julia-cheatsheet.html
+https://docs.julialang.org/en/v1/manual/arrays/
+https://docs.julialang.org/en/v1/manual/mathematical-operations/
+https://stackoverflow.com/questions/49062852/conditionally-increase-integer-count-with-an-if-statement-in-python
+https://discourse.julialang.org/t/how-to-calculate-the-the-minimum-value-in-a-vector-array-of-vectors/38111/8
+https://docs.juliaplots.org/latest/colors/
+https://www.mathworks.com/matlabcentral/cody/problems/2-make-the-vector-1-2-3-4-5-6-7-8-9-10
+https://www.geeksforgeeks.org/vectors-in-julia/
+https://discourse.julialang.org/t/how-to-generate-a-sequence-of-numbers-in-julia/19864
